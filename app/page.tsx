@@ -1,6 +1,9 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { Capacitor } from "@capacitor/core";
+import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
+import { Haptics, ImpactStyle } from "@capacitor/haptics";
 
 interface ExtractedData {
   documentType: string;
@@ -154,6 +157,40 @@ export default function BuroAIApp() {
     if (e.target.files && e.target.files[0]) {
       setFile(e.target.files[0]);
       setError(null);
+    }
+  };
+
+  const handleNativeCamera = async () => {
+    if (Capacitor.isNativePlatform()) {
+      try {
+        await Haptics.impact({ style: ImpactStyle.Light });
+        const photo = await Camera.getPhoto({
+          quality: 90,
+          allowEditing: false,
+          resultType: CameraResultType.Base64,
+          source: CameraSource.Camera,
+        });
+
+        if (photo.base64String) {
+          const byteCharacters = atob(photo.base64String);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: `image/${photo.format}` });
+          const nativeFile = new File([blob], `scan_${Date.now()}.${photo.format}`, {
+            type: `image/${photo.format}`,
+          });
+          setFile(nativeFile);
+          setError(null);
+          showToast("Captured document via camera!");
+        }
+      } catch (err) {
+        console.log("Camera dismissed or denied:", err);
+      }
+    } else {
+      cameraInputRef.current?.click();
     }
   };
 
@@ -380,13 +417,13 @@ export default function BuroAIApp() {
               </div>
             </div>
 
-            {/* Camera Quick Action for Mobile */}
+            {/* Camera Quick Action */}
             <div style={styles.mobileCaptureRow}>
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  cameraInputRef.current?.click();
+                  handleNativeCamera();
                 }}
                 style={styles.cameraButton}
               >
@@ -722,16 +759,17 @@ export default function BuroAIApp() {
                         </div>
                       </div>
                     )}
-                    {result.issuingAuthority.contact && (
-                      <div style={styles.contactSection}>
-                        {result.issuingAuthority.contact.phone && (
-                          <p style={styles.contactLine}>📞 {result.issuingAuthority.contact.phone}</p>
-                        )}
-                        {result.issuingAuthority.contact.email && (
-                          <p style={styles.contactLine}>✉️ {result.issuingAuthority.contact.email}</p>
-                        )}
-                      </div>
-                    )}
+                    <div style={styles.contactSection}>
+                      {result.issuingAuthority.phone && (
+                        <p style={styles.contactLine}>📞 {result.issuingAuthority.phone}</p>
+                      )}
+                      {result.issuingAuthority.email && (
+                        <p style={styles.contactLine}>✉️ {result.issuingAuthority.email}</p>
+                      )}
+                      {result.issuingAuthority.website && (
+                        <p style={styles.contactLine}>🌐 {result.issuingAuthority.website}</p>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -843,7 +881,6 @@ export default function BuroAIApp() {
   );
 }
 
-// Crisp UI Stylesheet
 const styles: Record<string, React.CSSProperties> = {
   container: {
     minHeight: "100vh",
